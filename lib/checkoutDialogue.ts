@@ -28,16 +28,21 @@ export function safeCheckoutReply(args:{
 }):string|null{
   const {text,previous,draft,cart,quote,catalog}=args;
   if(!cart.cart.length)return null;
-  const t=normalize(text);
   const immediate=has(text,/\b(agora|ja|imediat|o mais rapido|pra hoje|para hoje)\b/);
   const future=has(text,/\b(amanha|depois|agendar|encomenda|proxima semana)\b/);
-  const checkout=has(text,/\b(entrega|entregar|delivery|retirada|retirar|buscar|endereco|bairro|cidade|frete|taxa|pix|dinheiro|cartao|debito|credito|pagamento|troco|total|resumo|finalizar|fechar|concluir|confirmar)\b/);
+  const checkout=has(text,/\b(entrega|entregar|delivery|retirada|retirar|buscar|endereco|bairro|cidade|frete|taxa|pix|dinheiro|cartao|debito|credito|pagamento|troco|total|resumo|finalizar|fechar|concluir|confirmar|quanto fica|quanto deu|pagar)\b/);
   // A phone number / checkout field in free text is also actionable.
   if(!immediate&&!future&&!checkout&&!requiredDataChanged(previous,draft))return null;
 
   const shopUnavailable=!quote.storeOpen;
   if(immediate&&!future&&shopUnavailable){
-    return 'Entendi, você quer receber agora. No momento não consigo confirmar atendimento imediato pelos horários cadastrados. Posso deixar o orçamento simulado pronto, mas a equipe precisa confirmar a disponibilidade. Não fiz agendamento nem enviei pedido.';
+    const value=quote.deliveryFee!==null && quote.total!==null
+      ? 'Produtos '+money(cart.subtotal)+' + entrega '+money(quote.deliveryFee)+' = '+money(quote.total)+'. '
+      : 'Produtos '+money(cart.subtotal)+'. Frete e total dependem de confirmação do bairro. ';
+    const addr=draft.fulfillment==='delivery' && quote.deliveryFee===null
+      ? 'Também não consegui confirmar a taxa e a cobertura para '+(draft.neighborhood||'o bairro informado')+'. '
+      : '';
+    return 'Entendi, você quer para agora. Não consigo confirmar atendimento imediato conforme o funcionamento cadastrado. '+value+addr+'Se quiser outro horário, a equipe precisa confirmar a disponibilidade. Nenhum pedido foi enviado ou agendado.';
   }
   if(draft.requestedWhen&&!immediate){
     // Scheduling cannot be guaranteed by the lab, regardless of fields.
