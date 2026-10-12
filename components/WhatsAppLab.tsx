@@ -26,6 +26,7 @@ export default function WhatsAppLab(){
  const media=useRef<MediaRecorder|null>(null);
  const chunks=useRef<Blob[]>([]);
  const abortRef=useRef<AbortController|null>(null);
+ const flowRef=useRef(0);
  useEffect(()=>{
    try {
      const raw=localStorage.getItem(STORAGE);
@@ -63,6 +64,7 @@ export default function WhatsAppLab(){
    }finally{if(abortRef.current===controller){abortRef.current=null;setBusy(false);}}
  }
  function reset(){
+   flowRef.current++;
    abortRef.current?.abort();abortRef.current=null;
    if(media.current?.state==='recording')media.current.stop();
    setRecording(false);setBusy(false);setTranscribing(false);
@@ -78,14 +80,18 @@ export default function WhatsAppLab(){
  async function toggleAudio(){
    if(recording){media.current?.stop();setRecording(false);return;}
    if(busy||transcribing)return;
+   const startingFlow=flowRef.current;
    try{
      if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined')throw new Error('Este navegador não permite gravação de áudio.');
      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+     if(flowRef.current!==startingFlow){stream.getTracks().forEach(t=>t.stop());return;}
      const recorder=new MediaRecorder(stream);
      media.current=recorder;chunks.current=[];
      recorder.ondataavailable=e=>{if(e.data.size)chunks.current.push(e.data);};
+     const recorderFlow=flowRef.current;
      recorder.onstop=async()=>{
        stream.getTracks().forEach(t=>t.stop());
+       if(flowRef.current!==recorderFlow)return;
        const type=recorder.mimeType||'audio/webm';
        const blob=new Blob(chunks.current,{type});
        chunks.current=[];setRecording(false);
@@ -95,12 +101,12 @@ export default function WhatsAppLab(){
        try{
          const form=new FormData();form.append('audio',new File([blob],type.includes('mp4')?'mensagem.mp4':'mensagem.webm',{type}));
          const r=await fetch('/api/audio',{method:'POST',body:form});
-         const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha no áudio.');
+         const data=await r.json();if(flowRef.current!==recorderFlow)return;if(!r.ok)throw new Error(data.error||'Falha no áudio.');
          const transcript=String(data.text||'').trim();
          if(!transcript)throw new Error('Não reconheci o áudio. Tente novamente.');
          setInput(transcript);
-       }catch(e){setError(e instanceof Error?e.message:'Não foi possível transcrever.');}
-       finally{setTranscribing(false);}
+       }catch(e){if(flowRef.current===recorderFlow)setError(e instanceof Error?e.message:'Não foi possível transcrever.');}
+       finally{if(flowRef.current===recorderFlow)setTranscribing(false);}
      };
      recorder.start(300);setRecording(true);
    }catch(e){setError(e instanceof Error?e.message:'Não foi possível acessar o microfone.');setRecording(false);}
