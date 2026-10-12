@@ -54,6 +54,18 @@ function mentionedOptions(text:string,group:Group){
 function flavorMessage(text:string){
   return /\b(misto|mistos|mista|mistas|misturado|misturados|mistura|todos|todas|sabores|menos|exceto|sem|tira|retira|so|apenas|somente)\b/.test(normalize(text));
 }
+function explicitFlavorCounts(text:string,group:Group){
+  const t=normalize(text);
+  const counted=new Map<string,number>();
+  for(const option of group.options){
+    const name=normalize(option.name).replace(/\s+/g,'\\s+');
+    const first=t.match(new RegExp('\\b(\\d{1,5})\\s+(?:de\\s+)?'+name+'s?\\b'));
+    const last=t.match(new RegExp('\\b'+name+'s?\\s+(\\d{1,5})\\b'));
+    const match=first||last;
+    if(match)counted.set(option.id,Number(match[1]));
+  }
+  return counted;
+}
 function response(units:number,selected:{name:string;quantity:number}[],omissions:string[],uneven:boolean){
   const list=selected.map(item=>item.quantity+' de '+item.name.toLowerCase());
   const description=list.length===1?list[0]:list.slice(0,-1).join(', ')+' e '+list[list.length-1];
@@ -99,9 +111,11 @@ export function resolveMixedFlavorIntent(messages:Message[],catalog:Catalog,curr
     }
   }
   const allowed=group.options.filter(o=>!excludedIds.has(o.id));
+  const counted=explicitFlavorCounts(current,group);
   const all=/\b(todos|todas|misto|mistos|mista|mistas|misturado|misturados|mistura)\b/.test(normalize(current));
   const only=/\b(so|apenas|somente|exclusivamente)\b/.test(normalize(current));
-  let chosen=all&&!only?allowed:explicit.filter(o=>!excludedIds.has(o.id));
+  let chosen=counted.size?allowed.filter(o=>counted.has(o.id))
+    :all&&!only?allowed:explicit.filter(o=>!excludedIds.has(o.id));
 
   // A one-word follow-up naming an excluded flavor is ambiguous, not permission
   // to silently replace the previously agreed exclusion.
@@ -110,8 +124,13 @@ export function resolveMixedFlavorIntent(messages:Message[],catalog:Catalog,curr
   const totalUnits=units*packs;
   if(!chosen.length||chosen.length>70||totalUnits>10000*chosen.length)return null;
 
+  // Explicit counts override the mixed distribution, with no silent 70/30 -> 50/50.
+  if(counted.size&&([...counted.keys()].some(id=>excludedIds.has(id)) ||
+    [...counted.values()].some(n=>!Number.isInteger(n)||n<=0) ||
+    [...counted.values()].reduce((a,b)=>a+b,0)!==totalUnits))return null;
   const perFlavor=Math.floor(totalUnits/chosen.length),remainder=totalUnits%chosen.length;
-  const extras=chosen.map((o,i)=>({extraId:o.id,quantity:perFlavor+(i<remainder?1:0)}));
+  const extras=chosen.map((o,i)=>({extraId:o.id,quantity:counted.size
+    ?counted.get(o.id)!:perFlavor+(i<remainder?1:0)}));
   if(extras.some(e=>e.quantity<1||e.quantity>10000))return null;
   const cart=currentCart.slice();
   const existing=cart.findIndex(line=>line.productId===product.id);
