@@ -28,7 +28,7 @@ export function enrichAddressFromMessage(
   if(next.neighborhood!==previous.neighborhood &&
       !zone&&!includesPhrase(message,next.neighborhood))next.neighborhood=previous.neighborhood;
   if(next.street!==previous.street&&!includesPhrase(message,next.street))next.street=previous.street;
-  if(next.number!==previous.number&&!new RegExp('\\b'+next.number+'\\b').test(message))next.number=previous.number;
+  if(next.number!==previous.number&&(!/^\d{1,6}[a-z]?$/i.test(next.number)||!includesPhrase(message,next.number)))next.number=previous.number;
   if(!explicitCity&&next.city!==previous.city)next.city=previous.city;
   if(zone){
     // Preserve canonical neighborhood spelling. The city is inferred only if
