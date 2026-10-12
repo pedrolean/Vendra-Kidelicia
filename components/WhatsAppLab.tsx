@@ -69,7 +69,13 @@ export default function WhatsAppLab(){
      if(result.quote)setQuote(result.quote);
      setMessages(old=>[...old,{id:uid(),role:'assistant',content:result.reply||'Você pode me contar mais sobre o que procura?',at:currentTime()}]);
    }catch(e){if(controller.signal.aborted)return;
-     setError(e instanceof Error?e.message:'Não foi possível enviar. Tente novamente.');
+     // The server did not confirm this turn: put it back into the composer
+     // rather than leaving an unanswered customer bubble in the conversation.
+     // This also keeps the retry idempotent from the UI's perspective.
+     setMessages(old=>old.filter(m=>m.id!==user.id));
+     setInput(text);
+     if(photo===null && attachment)setPhoto(attachment);
+     setError((e instanceof Error?e.message:'Não foi possível enviar.')+' Sua mensagem foi preservada; toque em enviar para tentar novamente.');
    }finally{if(abortRef.current===controller){abortRef.current=null;setBusy(false);}}
  }
  function reset(){
