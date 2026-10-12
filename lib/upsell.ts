@@ -17,7 +17,7 @@ function containsProduct(cart:VerifiedCart,productId:string){
 }
 function money(value:number){return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value);}
 
-export function upsellOptions(cart:VerifiedCart,catalog:Catalog):UpsellOption[]{
+export function availableUpsellOptions(cart:VerifiedCart,catalog:Catalog):UpsellOption[]{
   const present=new Set<'drink'|'dessert'>();
   for(const line of cart.cart){
     const item=catalog.products.find(p=>p.id===line.productId);
@@ -30,12 +30,17 @@ export function upsellOptions(cart:VerifiedCart,catalog:Catalog):UpsellOption[]{
     const kind=category(p);
     return kind&&!present.has(kind)&&visiblePrice(p)&&!containsProduct(cart,p.id);
   });
-  const drinks=candidates.filter(p=>category(p)==='drink').sort((a,b)=>a.price-b.price).slice(0,2);
-  const desserts=candidates.filter(p=>category(p)==='dessert').sort((a,b)=>a.price-b.price).slice(0,2);
-  return [...drinks,...desserts].map(p=>({
+  return candidates.map(p=>({
     id:p.id,name:p.name,price:p.price,kind:category(p)!,
     needsChoice:p.group.some(g=>g.required||g.min_select>0)
   }));
+}
+export function upsellOptions(cart:VerifiedCart,catalog:Catalog):UpsellOption[]{
+  const all=availableUpsellOptions(cart,catalog);
+  return [
+    ...all.filter(p=>p.kind==='drink').sort((a,b)=>a.price-b.price).slice(0,2),
+    ...all.filter(p=>p.kind==='dessert').sort((a,b)=>a.price-b.price).slice(0,2)
+  ];
 }
 export function hasSuggestedExtras(cart:VerifiedCart,catalog:Catalog){
   return cart.cart.some(line=>{
