@@ -87,3 +87,25 @@ test('itens idênticos duplicados são rejeitados e não perdem contagem',()=>{
  const twice=validateCart([{productId:'coca2l',quantity:1,extras:[]},{productId:'coca2l',quantity:1,extras:[]}],catalog);
  assert.equal(twice.valid,false);
 });
+
+test('explicit 70 coxinhas e 30 queijos nunca vira 50/50',()=>{
+ const result=resolveMixedFlavorIntent([{role:'user',content:'Quero 100 salgados mistos 70 coxinhas e 30 de queijo'}],catalog,[]);
+ assert.ok(result);
+ assert.equal(result.cart[0].extras.find(e=>e.extraId==='c')?.quantity,70);
+ assert.equal(result.cart[0].extras.find(e=>e.extraId==='q')?.quantity,30);
+ assert.equal(result.cart[0].extras.length,2);
+});
+test('100 salgados 70 coxinhas 30 queijo sem palavra misto',()=>{
+ const result=resolveMixedFlavorIntent([{role:'user',content:'Quero 100 salgados, 70 coxinhas e 30 queijo'}],catalog,[]);
+ assert.ok(result);
+ assert.equal(result.cart[0].extras.reduce((sum,e)=>sum+e.quantity,0),100);
+ assert.equal(result.cart[0].extras[0].quantity,70);
+});
+test('100 salgados com contagem de sabores 70 + 40 pede revisão, não redistribui',()=>{
+ const result=resolveMixedFlavorIntent([{role:'user',content:'Quero 100 salgados mistos, 70 de coxinha e 40 de queijo'}],catalog,[]);
+ assert.equal(result,null);
+});
+test('sabor explicitamente excluído não pode reaparecer com quantidade',()=>{
+ const result=resolveMixedFlavorIntent([{role:'user',content:'Quero 100 salgados mistos menos risole: 70 de risole e 30 de queijo'}],catalog,[]);
+ assert.equal(result,null);
+});
