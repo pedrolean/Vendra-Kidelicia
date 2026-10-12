@@ -3,6 +3,7 @@ import { isAuthenticated } from '@/lib/auth';
 import { loadCatalog, type Catalog, type Product } from '@/lib/catalog';
 import { validateCart } from '@/lib/cart';
 import { EMPTY_DRAFT, quoteOrder, sanitizeDraft } from '@/lib/checkout';
+import { resolveMixedFlavorIntent } from '@/lib/flavorIntent';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 
@@ -54,6 +55,32 @@ export async function POST(request:Request){
   if(!catalog.ready)return NextResponse.json({reply:'Ainda não consegui consultar o cardápio da Ki Delícia. Verifique a conexão com o PedidoPro para evitar informações incorretas.',cart:[],subtotal:0,draft:previousDraft,ready:false});
   if(!catalog.products.length)return NextResponse.json({reply:'Não encontrei produtos ativos no cardápio. Preciso que isso seja conferido antes de informar preços.',cart:[],subtotal:0,draft:previousDraft,ready:false});
   const before=validateCart(Array.isArray(body.cart)?body.cart:[],catalog);
+  // Explicit mixed-flavor requests are deterministic: do not let the model
+  // invent a cart with zero selected flavors and trap the customer in a loop.
+  // Only accept existing product/option IDs and validate every line again.
+  const resolved=!image && before.valid
+    ? resolveMixedFlavorIntent(messages,catalog,before.cart)
+    : null;
+  if(resolved){
+    const verified=validateCart(resolved.cart,catalog);
+    if(verified.valid){
+      const quote=quoteOrder(verified,previousDraft,catalog);
+      return NextResponse.json({
+        reply:resolved.reply,
+        cart:verified.cart,
+        subtotal:verified.subtotal,
+        draft:previousDraft,
+        quote:{
+          readyForSimulation:quote.readyForSimulation,
+          issues:quote.issues,
+          deliveryFee:quote.deliveryFee,
+          total:quote.total,
+          warnings:quote.warnings
+        },
+        ready:true
+      },{headers:{'Cache-Control':'no-store'}});
+    }
+  }
   if(!process.env.OPENAI_API_KEY)return NextResponse.json({reply:'O cardápio está conectado, mas falta configurar OPENAI_API_KEY na Vercel.',cart:before.cart,subtotal:before.subtotal,draft:previousDraft,ready:false});
   const selection=compactProducts(catalog,messages,new Set(before.cart.map(x=>x.productId)));
   const system=[
