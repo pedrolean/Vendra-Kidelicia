@@ -53,7 +53,8 @@ export async function POST(request:Request){
   const image=typeof body.image==='string'&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(body.image)&&body.image.length<2_800_000?body.image:null;
   if(body.image&&!image)return outputError('Imagem inválida ou muito grande (máximo 2 MB).',400);
   const catalog=await loadCatalog();
-  const previousDraft=inferCityFromZones(sanitizeDraft(body.draft,EMPTY_DRAFT),catalog);
+  const explicitlyNamedCity=messages.some(m=>m.role==='user'&&/\b(rio grande da serra|ribeirao pires)\b/.test(normalize(m.content)));
+  const previousDraft=inferCityFromZones(sanitizeDraft(body.draft,EMPTY_DRAFT),catalog,explicitlyNamedCity);
   if(!catalog.ready)return NextResponse.json({reply:'Ainda não consegui consultar o cardápio da Ki Delícia. Verifique a conexão com o PedidoPro para evitar informações incorretas.',cart:[],subtotal:0,draft:previousDraft,ready:false});
   if(!catalog.products.length)return NextResponse.json({reply:'Não encontrei produtos ativos no cardápio. Preciso que isso seja conferido antes de informar preços.',cart:[],subtotal:0,draft:previousDraft,ready:false});
   const before=validateCart(Array.isArray(body.cart)?body.cart:[],catalog);
@@ -156,7 +157,7 @@ export async function POST(request:Request){
     const after=validateCart(parsed.cart===undefined?before.cart:parsed.cart,catalog);
     // Never commit a half-valid model cart. Preserve the last valid cart.
     const accepted=after.valid?after:before.valid?before:validateCart([],catalog);
-    const draft=inferCityFromZones(sanitizeDraft(parsed.draft,previousDraft),catalog);
+    const draft=inferCityFromZones(sanitizeDraft(parsed.draft,previousDraft),catalog,explicitlyNamedCity);
     // Upsell state is server-owned; the model cannot mark itself accepted/declined.
     draft.upsellStatus=previousDraft.upsellStatus;
     const currentOptions=upsellOptions(before,catalog);
@@ -173,8 +174,7 @@ export async function POST(request:Request){
     if(draft.upsellStatus==='pending'&&accepted.valid&&accepted.cart.length&&draft.fulfillment&&
       draft.paymentMethod&&
       quote.issues.every(issue=>issue==='Informar o nome.')&&
-      (draft.fulfillment==='pickup'||quote.deliveryFee!==null)&&
-      draft.street.length+draft.number.length>=0){
+      (draft.fulfillment==='pickup'||quote.deliveryFee!==null)){
       draft.upsellStatus=upsellOptions(accepted,catalog).length?'offered':'declined';
       quote=quoteOrder(accepted,draft,catalog,{requirePhone:false});
     }
