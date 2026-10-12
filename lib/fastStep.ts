@@ -75,8 +75,8 @@ export function handleFastStep(args:{
  if(offered&&isUpsellDecline(message))draft.upsellStatus='declined';
  else if(offered){
    const selected=itemSelection(message,cart,catalog);
-   if(selected&&'ask'in selected)return {cart,draft,reply:selected.ask};
-   if(selected&&'cart'in selected){cart=selected.cart;draft.upsellStatus='accepted';}
+   if(selected&&'ask'in selected&&typeof selected.ask==='string')return {cart,draft,reply:selected.ask};
+   if(selected&&'cart'in selected&&selected.cart){cart=selected.cart;draft.upsellStatus='accepted';}
  }
  const productIntent=isCartEditMessage(message,catalog);
  // Other product edits go to model; guard its output deterministically.
