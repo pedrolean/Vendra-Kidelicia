@@ -1,6 +1,7 @@
 import type { Catalog } from './catalog';
 import type { VerifiedCart } from './cart';
 import type { Draft, Quote } from './checkout';
+import {makeUpsellText, upsellOptions} from './upsell';
 
 function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -32,7 +33,7 @@ export function safeCheckoutReply(args:{
   const future=has(text,/\b(amanha|depois|agendar|encomenda|proxima semana)\b/);
   const checkout=has(text,/\b(entrega|entregar|delivery|retirada|retirar|buscar|endereco|bairro|cidade|frete|taxa|pix|dinheiro|cartao|debito|credito|pagamento|troco|total|resumo|finalizar|fechar|concluir|confirmar|quanto fica|quanto deu|pagar)\b/);
   // A phone number / checkout field in free text is also actionable.
-  if(!immediate&&!future&&!checkout&&!requiredDataChanged(previous,draft))return null;
+  if(!immediate&&!future&&!checkout&&!requiredDataChanged(previous,draft)&&previous.upsellStatus===draft.upsellStatus)return null;
 
   const shopUnavailable=!quote.storeOpen;
   if(immediate&&!future&&shopUnavailable){
@@ -66,8 +67,6 @@ export function safeCheckoutReply(args:{
     if(!draft.street)return 'Esse bairro consta nas regiões cadastradas. Qual é a rua ou avenida da entrega?';
     if(!draft.number)return 'E qual é o número do endereço?';
   }
-  if(!draft.name)return 'Como posso anotar seu nome para a simulação do pedido?';
-  if(!/^\d{10,13}$/.test(draft.phone.replace(/\D/g,'')))return 'Qual é o WhatsApp com DDD para contato?';
   if(!draft.paymentMethod)return 'Como você prefere pagar: Pix, dinheiro, débito ou crédito?';
   const paymentEnabled=({
     pix:'accept_pix',cash:'accept_cash',debit:'accept_debit',credit:'accept_credit'
@@ -80,6 +79,14 @@ export function safeCheckoutReply(args:{
       '. O pedido atual tem '+money(cart.subtotal)+'. Quer acrescentar algo?';
   if(quote.issues.some(issue=>issue.startsWith('Troco')))
     return 'Para pagamento em dinheiro, preciso confirmar um valor para troco maior que o total. Pode me dizer para quanto?';
+  if(draft.upsellStatus==='offered' && previous.upsellStatus!=='offered'){
+    const offer=makeUpsellText(upsellOptions(cart,catalog));
+    if(offer)return offer;
+  }
+  if(draft.upsellStatus==='offered' && previous.upsellStatus==='offered'){
+    return 'Quer acrescentar uma das opções ou prefere seguir sem adicionais?';
+  }
+  if(!draft.name)return 'Para concluir a simulação, qual é seu nome?';
   if(!quote.readyForSimulation){
     return 'Ainda preciso conferir alguns dados antes do resumo: '+quote.issues.slice(0,2).join(' ');
   }
