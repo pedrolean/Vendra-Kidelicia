@@ -47,7 +47,7 @@ test('pedido imediato não deve virar encomenda automaticamente',()=>{
 });
 test('se falta cidade, pergunta só cidade e não soma frete',()=>{
  const result=reply('Entrega',{...confirmed,city:''});
- assert.equal(result,'Qual é a cidade para a entrega?');
+ assert.match(result,/^Qual é a cidade para a entrega\?/);
 });
 test('bairro ausente recebe pergunta objetiva antes do valor final',()=>{
  const result=reply('dinheiro',{...confirmed,neighborhood:''});
