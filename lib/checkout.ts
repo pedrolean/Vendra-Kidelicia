@@ -4,10 +4,11 @@ export type Fulfillment='delivery'|'pickup'|null;
 export type Payment='pix'|'cash'|'debit'|'credit'|null;
 export type Draft={
   name:string;phone:string;fulfillment:Fulfillment;city:string;neighborhood:string;street:string;number:string;
-  complement:string;paymentMethod:Payment;changeFor:number|null;requestedWhen:string;notes:string
+  complement:string;paymentMethod:Payment;changeFor:number|null;requestedWhen:string;notes:string;
+  upsellStatus:'pending'|'offered'|'declined'|'accepted'
 };
 export type Quote={readyForSimulation:boolean;issues:string[];warnings:string[];deliveryFee:number|null;total:number|null;minimumOrder:number;storeOpen:boolean;};
-export const EMPTY_DRAFT:Draft={name:'',phone:'',fulfillment:null,city:'',neighborhood:'',street:'',number:'',complement:'',paymentMethod:null,changeFor:null,requestedWhen:'',notes:''};
+export const EMPTY_DRAFT:Draft={name:'',phone:'',fulfillment:null,city:'',neighborhood:'',street:'',number:'',complement:'',paymentMethod:null,changeFor:null,requestedWhen:'',notes:'',upsellStatus:'pending'};
 const textKeys=['name','phone','city','neighborhood','street','number','complement','requestedWhen','notes'] as const;
 export function sanitizeDraft(input:unknown,previous:Draft=EMPTY_DRAFT):Draft {
   const draft:Draft={...EMPTY_DRAFT,...previous};
@@ -24,6 +25,7 @@ export function sanitizeDraft(input:unknown,previous:Draft=EMPTY_DRAFT):Draft {
     const n=obj.changeFor;
     draft.changeFor=typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<=100000?n:null;
   }
+  if(['pending','offered','declined','accepted'].includes(String(obj.upsellStatus)))draft.upsellStatus=obj.upsellStatus as Draft['upsellStatus'];
   return draft;
 }
 function key(v:unknown){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');}
@@ -56,14 +58,21 @@ export function isStoreOpen(settings:Record<string,unknown>,at:Date=new Date()):
   };
   return active(schedule.find(h=>Number(h.day)===day),false)||active(schedule.find(h=>Number(h.day)===(day+6)%7),true);
 }
-export function quoteOrder(cart:VerifiedCart,draft:Draft,catalog:Catalog):Quote {
+export function inferCityFromZones(draft:Draft,catalog:Catalog):Draft {
+  if(draft.fulfillment!=='delivery'||draft.city||!draft.neighborhood)return draft;
+  const same=catalog.zones.filter(zone=>key(zone.neighborhood)===key(draft.neighborhood));
+  const cities=[...new Map(same.filter(z=>z.city).map(z=>[key(z.city),String(z.city)])).values()];
+  if(cities.length!==1)return draft; // Do not guess if the neighborhood exists in both cities.
+  return {...draft,city:cities[0]};
+}
+export function quoteOrder(cart:VerifiedCart,draft:Draft,catalog:Catalog,opts:{requirePhone?:boolean}={}):Quote {
   const issues:string[]=[],warnings:string[]=[];
   const settings=catalog.settings;
   const open=isStoreOpen(settings);
   if(!cart.valid)issues.push(...cart.problems);
   if(cart.cart.length===0)issues.push('Escolher pelo menos um produto do cardápio.');
   if(draft.name.trim().length<2)issues.push('Informar o nome.');
-  if(!/^\d{10,13}$/.test(draft.phone.replace(/\D/g,'')))issues.push('Informar o WhatsApp com DDD.');
+  if(opts.requirePhone!==false&&!/^\d{10,13}$/.test(draft.phone.replace(/\D/g,'')))issues.push('Informar o WhatsApp com DDD.');
   if(!draft.fulfillment)issues.push('Escolher entrega ou retirada.');
   if(draft.fulfillment&&settings[draft.fulfillment==='delivery'?'accept_delivery':'accept_pickup']!==true)issues.push(draft.fulfillment==='delivery'?'Entrega indisponível.':'Retirada indisponível.');
   const min=Number(draft.fulfillment==='delivery'?(settings.minimum_order_delivery??settings.minimum_order??0):(settings.minimum_order_pickup??0));
@@ -88,6 +97,7 @@ export function quoteOrder(cart:VerifiedCart,draft:Draft,catalog:Catalog):Quote 
   if(!open)warnings.push('Não confirmar pedido imediato: estabelecimento fora do horário ou disponibilidade não confirmada.');
   if(draft.requestedWhen)warnings.push('Data e horário de encomenda dependem de confirmação humana; não reservar automaticamente.');
   if(draft.paymentMethod==='pix')warnings.push('Pix apenas simulado: sem QR Code, sem comprovante validado e sem confirmação de pagamento.');
+  if(opts.requirePhone===false&&!draft.phone)warnings.push('O laboratório não conhece o telefone de origem. A integração real deve capturá-lo do evento oficial do WhatsApp.');
   warnings.push('Este laboratório nunca registra pedidos reais no PedidoPro.');
   return {readyForSimulation:issues.length===0,issues,warnings,deliveryFee:fee,total,minimumOrder,storeOpen:open};
 }
