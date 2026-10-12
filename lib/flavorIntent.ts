@@ -25,6 +25,16 @@ function requestedUnits(text:string){
     t.match(/\bsalgados?\s+(\d+)\s+unidades?\b/);
   return match?Number(match[1]):null;
 }
+function packagesRequested(text:string,units:number){
+  const t=normalize(text);
+  const m=t.match(/\b(\d+)\s+(?:kits?|pacotes?)\s+(?:de\s+)?(\d+)\s+salgados?\b/);
+  if(m&&Number(m[2])===units){
+    const quantity=Number(m[1]);
+    if(Number.isInteger(quantity)&&quantity>=1&&quantity<=100)return quantity;
+    return null;
+  }
+  return 1;
+}
 function flavorGroup(product:Product){
   const groups=product.group.filter(g=>has(g.name,'sabores dos salgados'));
   return groups.length===1?groups[0]:null;
@@ -65,8 +75,9 @@ export function resolveMixedFlavorIntent(messages:Message[],catalog:Catalog,curr
   if(!requests.length)return null;
   const request=requests[requests.length-1];
   const units=requestedUnits(request.content);
+  const packs=units?packagesRequested(request.content,units):null;
   const matching=catalog.products.filter(p=>kitUnits(p)===units && flavorGroup(p));
-  if(matching.length!==1||!units)return null; // Never guess between multiple similarly named kits.
+  if(matching.length!==1||!units||!packs)return null; // Never guess between multiple similarly named kits.
   const product=matching[0],group=flavorGroup(product)!;
   if(!group.options.length)return null;
 
@@ -96,16 +107,17 @@ export function resolveMixedFlavorIntent(messages:Message[],catalog:Catalog,curr
   // to silently replace the previously agreed exclusion.
   if(!chosen.length&&explicit.length&&explicit.some(o=>excludedIds.has(o.id)))return null;
   if(!chosen.length&&alreadyMixed)chosen=allowed;
-  if(!chosen.length||chosen.length>70||units>10000*chosen.length)return null;
+  const totalUnits=units*packs;
+  if(!chosen.length||chosen.length>70||totalUnits>10000*chosen.length)return null;
 
-  const perFlavor=Math.floor(units/chosen.length),remainder=units%chosen.length;
+  const perFlavor=Math.floor(totalUnits/chosen.length),remainder=totalUnits%chosen.length;
   const extras=chosen.map((o,i)=>({extraId:o.id,quantity:perFlavor+(i<remainder?1:0)}));
   if(extras.some(e=>e.quantity<1||e.quantity>10000))return null;
   const cart=currentCart.slice();
   const existing=cart.findIndex(line=>line.productId===product.id);
-  const line:CartLine={productId:product.id,quantity:1,extras};
+  const line:CartLine={productId:product.id,quantity:packs,extras};
   if(existing>=0)cart[existing]=line;
   else cart.push(line);
   const selected=chosen.map((o,i)=>({name:o.name,quantity:extras[i].quantity}));
-  return {cart,selected,reply:response(units,selected,omissions,remainder>0)};
+  return {cart,selected,reply:response(totalUnits,selected,omissions,remainder>0)};
 }
