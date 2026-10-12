@@ -58,11 +58,13 @@ export function isStoreOpen(settings:Record<string,unknown>,at:Date=new Date()):
   };
   return active(schedule.find(h=>Number(h.day)===day),false)||active(schedule.find(h=>Number(h.day)===(day+6)%7),true);
 }
-export function inferCityFromZones(draft:Draft,catalog:Catalog):Draft {
-  if(draft.fulfillment!=='delivery'||draft.city||!draft.neighborhood)return draft;
+export function inferCityFromZones(draft:Draft,catalog:Catalog,citySuppliedByCustomer=false):Draft {
+  if(draft.fulfillment!=='delivery'||!draft.neighborhood)return draft;
   const same=catalog.zones.filter(zone=>key(zone.neighborhood)===key(draft.neighborhood));
   const cities=[...new Map(same.filter(z=>z.city).map(z=>[key(z.city),String(z.city)])).values()];
   if(cities.length!==1)return draft; // Do not guess if the neighborhood exists in both cities.
+  if(citySuppliedByCustomer&&draft.city)return draft; // Respect an explicitly conflicting city and ask to clarify.
+  if(key(draft.city)===key(cities[0]))return draft;
   return {...draft,city:cities[0]};
 }
 export function quoteOrder(cart:VerifiedCart,draft:Draft,catalog:Catalog,opts:{requirePhone?:boolean}={}):Quote {
