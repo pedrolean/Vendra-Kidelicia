@@ -74,7 +74,7 @@ export default function WhatsAppLab(){
      // This also keeps the retry idempotent from the UI's perspective.
      setMessages(old=>old.filter(m=>m.id!==user.id));
      setInput(text);
-     if(photo===null && attachment)setPhoto(attachment);
+     if(photo)setPhoto(photo);
      setError((e instanceof Error?e.message:'Não foi possível enviar.')+' Sua mensagem foi preservada; toque em enviar para tentar novamente.');
    }finally{if(abortRef.current===controller){abortRef.current=null;setBusy(false);}}
  }
