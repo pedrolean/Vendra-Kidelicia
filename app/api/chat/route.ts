@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
 import { loadCatalog, type Catalog, type Product } from '@/lib/catalog';
 import { validateCart } from '@/lib/cart';
+import { chooseVerifiedCart } from '@/lib/cartIntent';
 import { EMPTY_DRAFT, inferCityFromZones, quoteOrder, sanitizeDraft } from '@/lib/checkout';
 import { resolveMixedFlavorIntent } from '@/lib/flavorIntent';
 import { safeCheckoutReply } from '@/lib/checkoutDialogue';
@@ -154,14 +155,16 @@ export async function POST(request:Request){
     const result=await response.json();
     let parsed:{reply?:unknown;cart?:unknown;draft?:unknown};
     try{parsed=JSON.parse(result.choices?.[0]?.message?.content||'{}');}catch{return outputError('A IA não estruturou corretamente a resposta. Tente novamente.',502);}
-    const after=validateCart(parsed.cart===undefined?before.cart:parsed.cart,catalog);
-    // Never commit a half-valid model cart. Preserve the last valid cart.
-    const accepted=after.valid?after:before.valid?before:validateCart([],catalog);
+    const proposed=parsed.cart===undefined?before.cart:parsed.cart;
+    const decision=chooseVerifiedCart(last.content,before,proposed,catalog);
+    // Address, neighborhood, phone and payment turns preserve previously
+    // validated items even if the model accidentally returns altered flavors.
+    const accepted=decision.accepted;
     const draft=inferCityFromZones(sanitizeDraft(parsed.draft,previousDraft),catalog,explicitlyNamedCity);
     // Upsell state is server-owned; the model cannot mark itself accepted/declined.
     draft.upsellStatus=previousDraft.upsellStatus;
     const currentOptions=upsellOptions(before,catalog);
-    if(draft.upsellStatus==='offered'&&after.valid&&
+    if(draft.upsellStatus==='offered'&&!decision.rejectedEdit&&
       currentOptions.some(opt=>accepted.cart.some(line=>line.productId===opt.id)&&!before.cart.some(line=>line.productId===opt.id)))
       draft.upsellStatus='accepted';
     if(draft.upsellStatus==='pending'&&hasSuggestedExtras(accepted,catalog))
@@ -179,8 +182,8 @@ export async function POST(request:Request){
       quote=quoteOrder(accepted,draft,catalog,{requirePhone:false});
     }
     let reply=typeof parsed.reply==='string'&&parsed.reply.trim()?parsed.reply.trim().slice(0,1700):'Posso te ajudar a montar seu pedido. O que você gostaria?';
-    if(!after.valid)reply='Ainda não registrei essa alteração no carrinho de teste. Preciso ajustar: '+after.problems.slice(0,3).join(' ')+'. Você pode me confirmar as opções corretas?';
-    const guarded=after.valid?safeCheckoutReply({
+    if(decision.rejectedEdit)reply='Preciso de um ajuste para alterar seu pedido: confira as quantidades e os sabores antes de eu mudar os itens já anotados. Seu pedido anterior continua salvo.';
+    const guarded=!decision.rejectedEdit?safeCheckoutReply({
       text:last.content,previous:previousDraft,draft,cart:accepted,quote,catalog
     }):null;
     const checkoutAsked=/\b(fechar|finalizar|confirmar pedido|concluir|total|resumo|quanto fica|quanto deu|pagar|pagamento|troco|fechamento)\b/i.test(normalize(last.content));
