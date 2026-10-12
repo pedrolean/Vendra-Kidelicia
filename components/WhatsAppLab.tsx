@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Camera, CheckCheck, ImagePlus, LoaderCircle, LogOut, Mic, RotateCcw, Send, Square, X } from 'lucide-react';
 type Message={id:string;role:'assistant'|'user';content:string;at:string;image?:string};
 type Line={productId:string;quantity:number;extras:{extraId:string;quantity:number}[];notes?:string};
-type Result={reply?:string;cart?:Line[];subtotal?:number;error?:string};
+type Draft={name:string;phone:string;fulfillment:'delivery'|'pickup'|null;city:string;neighborhood:string;street:string;number:string;complement:string;paymentMethod:'pix'|'cash'|'debit'|'credit'|null;changeFor:number|null;requestedWhen:string;notes:string};
+type Result={reply?:string;cart?:Line[];subtotal?:number;draft?:Draft;quote?:{total:number|null;deliveryFee:number|null;issues:string[];readyForSimulation:boolean};error?:string};
+const emptyDraft:Draft={name:'',phone:'',fulfillment:null,city:'',neighborhood:'',street:'',number:'',complement:'',paymentMethod:null,changeFor:null,requestedWhen:'',notes:''};
 const STORAGE='vendra_kidelicia_whatsapp_v2';
 const greeting:Message={id:'welcome',role:'assistant',content:'Oi! 😊 Seja bem-vindo(a) à Ki Delícia Salgados! Como posso te ajudar hoje?',at:'agora'};
 const suggestions=['Quero 50 salgados para festa 🎉','Quais sabores vocês têm?','Vocês entregam na minha região?'];
@@ -14,6 +16,8 @@ export default function WhatsAppLab(){
  const [messages,setMessages]=useState<Message[]>([greeting]);
  const [cart,setCart]=useState<Line[]>([]);
  const [subtotal,setSubtotal]=useState(0);
+ const [draft,setDraft]=useState<Draft>(emptyDraft);
+ const [quote,setQuote]=useState<Result['quote']>();
  const [input,setInput]=useState('');
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
@@ -27,6 +31,7 @@ export default function WhatsAppLab(){
  const chunks=useRef<Blob[]>([]);
  const abortRef=useRef<AbortController|null>(null);
  const flowRef=useRef(0);
+ const lastImageRef=useRef<string|null>(null);
  useEffect(()=>{
    try {
      const raw=localStorage.getItem(STORAGE);
@@ -34,30 +39,34 @@ export default function WhatsAppLab(){
        if(Array.isArray(saved.messages)&&saved.messages.length)setMessages(saved.messages.slice(-40).filter((m:Message)=>m&&['assistant','user'].includes(m.role)&&typeof m.content==='string'));
        if(Array.isArray(saved.cart))setCart(saved.cart.slice(0,25));
        if(typeof saved.subtotal==='number')setSubtotal(saved.subtotal);
+       if(saved.draft&&typeof saved.draft==='object')setDraft({...emptyDraft,...saved.draft});
      }
    }catch{}
    setReady(true);
  },[]);
  useEffect(()=>{if(!ready)return;
-   try{localStorage.setItem(STORAGE,JSON.stringify({messages:messages.slice(-40).map(m=>({...m,image:undefined})),cart,subtotal}));}catch{}
- },[messages,cart,subtotal,ready]);
+   try{localStorage.setItem(STORAGE,JSON.stringify({messages:messages.slice(-40).map(m=>({...m,image:undefined})),cart,subtotal,draft}));}catch{}
+ },[messages,cart,subtotal,draft,ready]);
  useEffect(()=>{bottom.current?.scrollIntoView({behavior:'smooth',block:'end'});},[messages,busy,error]);
  async function send(override?:string){
    const text=(override??input).trim();
    if(busy||(!text&&!photo))return;
    const user:Message={id:uid(),role:'user',content:text||(photo?'Enviei uma foto.':'Mensagem'),at:currentTime(),image:photo||undefined};
    const next=[...messages,user];
-   const attachment=photo;
+   const attachment=photo || (/foto|imagem|print|comprovante|aquilo que mandei/i.test(text)?lastImageRef.current:null);
+   if(photo)lastImageRef.current=photo;
    setMessages(next);setInput('');setPhoto(null);setError('');setBusy(true);
    const controller=new AbortController();abortRef.current=controller;
    try{
-     const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:next.map(m=>({role:m.role,content:m.content})),cart,image:attachment}),signal:controller.signal});
+     const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:next.map(m=>({role:m.role,content:m.content})),cart,draft,image:attachment}),signal:controller.signal});
      const result:Result=await response.json();
      if(response.status===401){window.location.reload();return;}
      if(!response.ok)throw new Error(result.error||'Falha ao enviar sua mensagem.');
      if(controller.signal.aborted)return;
      if(Array.isArray(result.cart))setCart(result.cart);
      if(typeof result.subtotal==='number')setSubtotal(result.subtotal);
+     if(result.draft)setDraft(result.draft);
+     if(result.quote)setQuote(result.quote);
      setMessages(old=>[...old,{id:uid(),role:'assistant',content:result.reply||'Você pode me contar mais sobre o que procura?',at:currentTime()}]);
    }catch(e){if(controller.signal.aborted)return;
      setError(e instanceof Error?e.message:'Não foi possível enviar. Tente novamente.');
@@ -65,17 +74,18 @@ export default function WhatsAppLab(){
  }
  function reset(){
    flowRef.current++;
+   lastImageRef.current=null;
    abortRef.current?.abort();abortRef.current=null;
    if(media.current?.state==='recording')media.current.stop();
    setRecording(false);setBusy(false);setTranscribing(false);
-   setMessages([{...greeting,id:uid()}]);setCart([]);setSubtotal(0);setInput('');setPhoto(null);setError('');
+   setMessages([{...greeting,id:uid()}]);setCart([]);setSubtotal(0);setDraft(emptyDraft);setQuote(undefined);setInput('');setPhoto(null);setError('');
    try{localStorage.removeItem(STORAGE);}catch{}
  }
  async function logout(){await fetch('/api/logout',{method:'POST'});window.location.reload();}
  function choosePhoto(file?:File){
    if(!file)return;
    if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>1_900_000){setError('Envie uma foto JPG, PNG ou WEBP de até 1,9 MB.');return;}
-   const reader=new FileReader();reader.onload=()=>{setPhoto(String(reader.result));setError('');};reader.readAsDataURL(file);
+   const captured=flowRef.current;const reader=new FileReader();reader.onload=()=>{if(flowRef.current!==captured)return;setPhoto(String(reader.result));setError('');};reader.readAsDataURL(file);
  }
  async function toggleAudio(){
    if(recording){media.current?.stop();setRecording(false);return;}
@@ -134,7 +144,7 @@ export default function WhatsAppLab(){
        <div ref={bottom}/>
      </div>
      <div className="wa-footer">
-       {subtotal>0&&<div className="wa-summary">🛍️ Pedido simulado: {cart.length} item(ns) · <strong>{money(subtotal)}</strong> <span>Não enviado</span></div>}
+       {subtotal>0&&<div className="wa-summary">🛍️ Pedido simulado: {cart.length} item(ns) · <strong>{money(quote?.total??subtotal)}</strong> <span>{quote?.total!==null&&quote?.total!==undefined&&draft.fulfillment==='delivery'?'Inclui entrega':'Não enviado'}</span></div>}
        {error&&<div className="wa-error" role="alert">{error}<button onClick={()=>setError('')} aria-label="Dispensar aviso"><X size={15}/></button></div>}
        {photo&&<div className="wa-attachment"><img src={photo} alt="Prévia da foto"/><span>Foto pronta para enviar</span><button onClick={()=>setPhoto(null)} aria-label="Remover imagem"><X size={18}/></button></div>}
        <div className="wa-composer">
