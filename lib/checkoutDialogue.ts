@@ -58,8 +58,8 @@ export function safeCheckoutReply(args:{
   // Delivery coverage and fees always take priority over payment or any
   // reassurance from the language model.
   if(draft.fulfillment==='delivery'){
-    if(!draft.city)return 'Qual é a cidade para a entrega?';
-    if(!draft.neighborhood)return 'Qual é o bairro da entrega? Preciso dele para verificar a taxa.';
+    if(!draft.neighborhood)return 'Qual é o bairro da entrega? Pode enviar bairro, rua e número juntos para agilizar. 😊';
+    if(!draft.city)return 'Qual é a cidade para a entrega? Esse bairro pode existir nas duas cidades.';
     if(quote.deliveryFee===null){
       return 'Ainda não consegui confirmar entrega e taxa para o bairro '+draft.neighborhood+
         ', em '+draft.city+'. Preciso que a equipe confira a região antes de informar o valor final. Não vou inventar o frete.';
