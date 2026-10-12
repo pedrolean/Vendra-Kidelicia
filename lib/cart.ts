@@ -31,10 +31,15 @@ export function validateCart(input:unknown,catalog:Catalog):VerifiedCart {
   if(!Array.isArray(input))return {cart,subtotal:0,problems:['O carrinho recebido não é válido.'],summary,valid:false};
   if(input.length>MAX_LINES)problems.push('Há itens demais no carrinho. Divida a encomenda e confirme com a equipe.');
   const productsById=new Map(catalog.products.map(product=>[product.id,product]));
+  const usedLines=new Set<string>();
   for(const raw of input.slice(0,MAX_LINES)) {
     if(!raw||typeof raw!=='object'){problems.push('Item inválido.');continue;}
     const product=productsById.get(raw.productId);
     if(!product){problems.push('Um produto está indisponível no cardápio.');continue;}
+    // Duplicate product rows confuse edits and prices; ask the model to merge
+    // amounts for identical IDs instead of silently dropping entries.
+    if(usedLines.has(product.id)){problems.push('Produto repetido no carrinho: '+product.name+'.');continue;}
+    usedLines.add(product.id);
     const quantity=count(raw.quantity,100);
     if(quantity===null){problems.push('Quantidade inválida para '+product.name+'.');continue;}
     const base=asCents(product.price);
@@ -48,9 +53,9 @@ export function validateCart(input:unknown,catalog:Catalog):VerifiedCart {
       const id=entry?.extraId;
       const group=product.group.find(g=>g.options.some(o=>o.id===id));
       const option=group?.options.find(o=>o.id===id);
-      const n=count(entry?.quantity,99);
+      const n=count(entry?.quantity,/SABORES\s+DOS\s+SALGADOS/i.test(group?.name||'')?10000:99);
       if(!group||!option||n===null||usedIds.has(id)){
-        problems.push('Sabor/adicional inválido, repetido ou com quantidade maior que 99 em '+product.name+'.');continue;
+        problems.push('Sabor/adicional inválido, repetido ou com quantidade fora do limite em '+product.name+'.');continue;
       }
       const cost=asCents(option.price);
       if(cost===null){problems.push('Preço de adicional inválido em '+product.name+'.');continue;}
