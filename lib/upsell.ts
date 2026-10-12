@@ -23,6 +23,9 @@ export function upsellOptions(cart:VerifiedCart,catalog:Catalog):UpsellOption[]{
     const item=catalog.products.find(p=>p.id===line.productId);
     if(item){const kind=category(item);if(kind)present.add(kind);}
   }
+  // The business rule is one non-intrusive offer if the order contains neither
+  // a beverage nor churros. Do not push more after either was already chosen.
+  if(present.size>0)return [];
   const candidates=catalog.products.filter(p=>{
     const kind=category(p);
     return kind&&!present.has(kind)&&visiblePrice(p)&&!containsProduct(cart,p.id);
