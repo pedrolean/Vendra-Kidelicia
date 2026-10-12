@@ -50,10 +50,10 @@ export function makeUpsellText(options:UpsellOption[]){
     titles.join('\n')+'\n\nSe não quiser, é só dizer “não, obrigado”.';
 }
 export function isUpsellDecline(message:string){
-  const text=message.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[.!?]/g,'');
+  const text=message.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[.!?,;]+/g,'').replace(/\s+/g,' ');
   return /^(nao|nao obrigado|nao obrigada|sem nada|dispenso|so isso|somente isso|pode fechar|nao quero|deixa assim|sem adicionais)$/.test(text);
 }
 export function isVagueUpsellYes(message:string){
-  const text=message.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[.!?]/g,'');
+  const text=message.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[.!?,;]+/g,'').replace(/\s+/g,' ');
   return /^(sim|quero|pode ser|pode|coloca|adiciona|manda|um deles)$/.test(text);
 }
