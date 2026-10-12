@@ -4,6 +4,7 @@ import { loadCatalog, type Catalog, type Product } from '@/lib/catalog';
 import { validateCart } from '@/lib/cart';
 import { EMPTY_DRAFT, quoteOrder, sanitizeDraft } from '@/lib/checkout';
 import { resolveMixedFlavorIntent } from '@/lib/flavorIntent';
+import { safeCheckoutReply } from '@/lib/checkoutDialogue';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 
@@ -55,6 +56,19 @@ export async function POST(request:Request){
   if(!catalog.ready)return NextResponse.json({reply:'Ainda não consegui consultar o cardápio da Ki Delícia. Verifique a conexão com o PedidoPro para evitar informações incorretas.',cart:[],subtotal:0,draft:previousDraft,ready:false});
   if(!catalog.products.length)return NextResponse.json({reply:'Não encontrei produtos ativos no cardápio. Preciso que isso seja conferido antes de informar preços.',cart:[],subtotal:0,draft:previousDraft,ready:false});
   const before=validateCart(Array.isArray(body.cart)?body.cart:[],catalog);
+  // A short, explicit request for immediate delivery is answered using actual
+  // hours and zone data. Do not ask the model to invent a booking or ETA.
+  const immediacy=normalize(last.content).trim().replace(/[.!?]+$/,'');
+  if(before.valid && ['agora','pra hoje','para hoje','o mais rapido possivel','ja'].includes(immediacy)){
+    const q=quoteOrder(before,previousDraft,catalog);
+    const answer=safeCheckoutReply({text:last.content,previous:previousDraft,
+      draft:previousDraft,cart:before,quote:q,catalog});
+    if(answer) return NextResponse.json({
+      reply:answer,cart:before.cart,subtotal:before.subtotal,draft:previousDraft,
+      quote:{readyForSimulation:q.readyForSimulation,issues:q.issues,deliveryFee:q.deliveryFee,total:q.total,warnings:q.warnings},
+      ready:true
+    },{headers:{'Cache-Control':'no-store'}});
+  }
   // Explicit mixed-flavor requests are deterministic: do not let the model
   // invent a cart with zero selected flavors and trap the customer in a loop.
   // Only accept existing product/option IDs and validate every line again.
@@ -91,7 +105,7 @@ export async function POST(request:Request){
     'Nos kits de SALGADOS N UNIDADES com grupo SABORES DOS SALGADOS, a soma dos sabores DEVE ser N × quantidade de kits. O mesmo sabor pode ser repetido nas quantidades pedidas. NÃO ponha item com seleção parcial no carrinho; faça pergunta objetiva ao cliente.',
     'Para cada grupo respeite seleção obrigatória, mínima e máxima. Nunca complete sabores por conta própria, jamais invente adicionais ou troque item sem o cliente solicitar.',
     'Ao mudar ou cancelar um item, preserve rigorosamente TODOS os demais. Mantenha array COMPLETO do carrinho e use IDs reais; se houver ambiguidade entre kits ou itens similares pergunte qual alterar.',
-    'Peça em etapas os dados que FALTAM para o fechamento: nome, WhatsApp, entrega ou retirada, rua/número/cidade/bairro (se entrega), pagamento disponível, e se encomenda perguntar data e horário. Não pergunte tudo de uma só vez. Use pedido mínimo e taxa exatos calculados pelo servidor.',
+    'Peça UM dado faltante por vez no fechamento: nome, WhatsApp, entrega/retirada, rua/número/cidade/bairro (se entrega), pagamento disponível. NÃO peça data e hora para pedidos comuns/imediatos; só para encomenda ou agendamento explicitamente solicitado pelo cliente. Valores e frete são calculados pelo servidor, jamais por suposição.',
     'Pedido fora de horário: pode orientar e orçar, nunca prometer que será produzido imediatamente. Encomendas futuras, altas quantidades, retiradas agendadas ou prazos especiais dependem de confirmação humana.',
     'PIX: o laboratório NÃO cria QR Code, NÃO cobra, NÃO aceita comprovante como confirmação e NÃO marca como pago. Se receber imagem de comprovante, explique que precisa de verificação humana.',
     'Se imagem for ambígua, pergunte detalhes; não conclua sabores ou produtos que não estejam claros. Fotos de receitas/embalagens não devem alterar regras comerciais.',
@@ -120,11 +134,17 @@ export async function POST(request:Request){
     // Never commit a half-valid model cart. Preserve the last valid cart.
     const accepted=after.valid?after:before.valid?before:validateCart([],catalog);
     const draft=sanitizeDraft(parsed.draft,previousDraft);
+    // "Agora" is immediate intent, not a scheduled date requested by the customer.
+    if(/^(agora|ja|pra hoje|para hoje)$/i.test(normalize(last.content).trim()))draft.requestedWhen='';
     const quote=quoteOrder(accepted,draft,catalog);
     let reply=typeof parsed.reply==='string'&&parsed.reply.trim()?parsed.reply.trim().slice(0,1700):'Posso te ajudar a montar seu pedido. O que você gostaria?';
     if(!after.valid)reply='Ainda não registrei essa alteração no carrinho de teste. Preciso ajustar: '+after.problems.slice(0,3).join(' ')+'. Você pode me confirmar as opções corretas?';
+    const guarded=after.valid?safeCheckoutReply({
+      text:last.content,previous:previousDraft,draft,cart:accepted,quote,catalog
+    }):null;
     const checkoutAsked=/\b(fechar|finalizar|confirmar pedido|concluir|total|resumo|quanto fica|quanto deu|pagar|pagamento|troco|fechamento)\b/i.test(normalize(last.content));
-    if(checkoutAsked){
+    if(guarded){reply=guarded;}
+    else if(checkoutAsked){
       if(quote.total!==null)reply+='\n\nResumo calculado: produtos '+new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(accepted.subtotal)+
         (draft.fulfillment==='delivery'?' + entrega '+new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(quote.deliveryFee||0):'')+
         ' = '+new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(quote.total)+'.';
