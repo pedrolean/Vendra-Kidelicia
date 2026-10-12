@@ -40,6 +40,11 @@ function itemSelection(message:string,cart:VerifiedCart,catalog:Catalog){
    return (key&&new RegExp('\\b'+key+'\\b').test(t))||
      (name.length>=5&&t.includes(name));
  });
+ if(candidates.length>1){
+   return {ask:'Tenho estas opções:\n'+candidates.map(o=>'• '+o.name+' — '+
+     new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(o.price)).join('\n')+
+     '\nQual você prefere?'} as const;
+ }
  if(candidates.length!==1)return null;
  const candidate=candidates[0];
  if(candidate.needsChoice)return {ask:'Esse item tem opções de escolha. Qual sabor ou configuração você prefere?'} as const;
