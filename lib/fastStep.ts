@@ -5,7 +5,7 @@ import {enrichAddressFromMessage} from './addressIntent.ts';
 import {validateCart,type VerifiedCart} from './cart.ts';
 import {isCartEditMessage} from './cartIntent.ts';
 import {safeCheckoutReply} from './checkoutDialogue.ts';
-import {isUpsellDecline,isVagueUpsellYes,makeUpsellText,upsellOptions} from './upsell.ts';
+import {availableUpsellOptions,isUpsellDecline,isVagueUpsellYes,makeUpsellText,upsellOptions} from './upsell.ts';
 
 function normalized(message:string) {
  return message.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
@@ -31,15 +31,16 @@ function nameWhenAsked(message:string,lastReply:string){
  return m[1].trim();
 }
 function itemSelection(message:string,cart:VerifiedCart,catalog:Catalog){
- const selections=upsellOptions(cart,catalog);
+ const selections=availableUpsellOptions(cart,catalog);
  const t=normalized(message);
- const candidates=selections.filter(p=>{
+ const exact=selections.filter(p=>t.includes(normalized(p.name)));
+ const candidates=(exact.length===1?exact:selections.filter(p=>{
    const name=normalized(p.name);
    // Prefer explicit product/brand, not a generic "quero o refri" guess.
    const key=p.kind==='dessert'?'churros':/coca cola/.test(name)?'coca':/guarana/.test(name)?'guarana':/pepsi/.test(name)?'pepsi':/fanta/.test(name)?'fanta':'';
    return (key&&new RegExp('\\b'+key+'\\b').test(t))||
      (name.length>=5&&t.includes(name));
- });
+ }));
  if(candidates.length>1){
    return {ask:'Tenho estas opções:\n'+candidates.map(o=>'• '+o.name+' — '+
      new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(o.price)).join('\n')+
