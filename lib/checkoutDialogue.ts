@@ -1,7 +1,7 @@
 import type { Catalog } from './catalog';
 import type { VerifiedCart } from './cart';
 import type { Draft, Quote } from './checkout';
-import {makeUpsellText, upsellOptions} from './upsell';
+import {makeUpsellText, upsellOptions} from './upsell.ts';
 
 function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
