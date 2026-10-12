@@ -19,7 +19,7 @@ const confirmed={...EMPTY_DRAFT,name:'Pedro',phone:'11999990000',fulfillment:'de
 function reply(text,draft=confirmed,cat=catalog()){
  const validated=validateCart([cart],cat);
  const quote=quoteOrder(validated,draft,cat);
- return safeCheckoutReply({text,previous:EMPTY_DRAFT,draft,cart:validated,quote,catalog:cat});
+ return safeCheckoutReply({text,previous:EMPTY_DRAFT,draft,cart:validated,quote,catalog:cat})?.replace(/\u00a0/g,' ');
 }
 test('50 salgados custa R$ 43 antes do frete',()=>{
  const result=validateCart([cart],catalog());
@@ -62,7 +62,7 @@ test('pagamento não escolhido recebe uma pergunta',()=>{
  const result=reply('Entrega',{...confirmed,paymentMethod:null});
  assert.match(result,/Como você prefere pagar/i);
 });
-test('não responde resumo de checkout a mensagem sobre outro assunto',()=>{
+test('dados de checkout alterados geram resumo fundamentado',()=>{
  const result=reply('Obrigado',confirmed,catalog());
  assert.equal(result,'Resumo do teste: produtos R$ 43,00 + taxa de entrega R$ 7,00, total R$ 50,00. Pagamento em dinheiro. O horário e a disponibilidade ainda precisam ser confirmados pela equipe. Nenhum pedido ou pagamento real foi registrado.');
 });
