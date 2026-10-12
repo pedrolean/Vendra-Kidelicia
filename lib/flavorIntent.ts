@@ -42,7 +42,7 @@ function mentionedOptions(text:string,group:Group){
     normalize(other.name).includes(normalize(option.name)) && has(text,other.name)));
 }
 function flavorMessage(text:string){
-  return /\b(misto|mistos|mista|mistas|misturado|misturados|mistura|todos|todas|sabores|menos|exceto|sem|tira|retira)\b/.test(normalize(text));
+  return /\b(misto|mistos|mista|mistas|misturado|misturados|mistura|todos|todas|sabores|menos|exceto|sem|tira|retira|so|apenas|somente)\b/.test(normalize(text));
 }
 function response(units:number,selected:{name:string;quantity:number}[],omissions:string[],uneven:boolean){
   const list=selected.map(item=>item.quantity+' de '+item.name.toLowerCase());
