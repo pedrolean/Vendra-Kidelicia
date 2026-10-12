@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
 import { loadCatalog, type Catalog, type Product } from '@/lib/catalog';
 import { validateCart } from '@/lib/cart';
-import { chooseVerifiedCart } from '@/lib/cartIntent';
+import { chooseVerifiedCart, isCancelEntireOrder } from '@/lib/cartIntent';
 import {handleFastStep} from '@/lib/fastStep';
 import { enrichAddressFromMessage } from '@/lib/addressIntent';
 import { EMPTY_DRAFT, inferCityFromZones, quoteOrder, sanitizeDraft } from '@/lib/checkout';
@@ -61,6 +61,14 @@ export async function POST(request:Request){
   if(!catalog.ready)return NextResponse.json({reply:'Ainda não consegui consultar o cardápio da Ki Delícia. Verifique a conexão com o PedidoPro para evitar informações incorretas.',cart:[],subtotal:0,draft:previousDraft,ready:false});
   if(!catalog.products.length)return NextResponse.json({reply:'Não encontrei produtos ativos no cardápio. Preciso que isso seja conferido antes de informar preços.',cart:[],subtotal:0,draft:previousDraft,ready:false});
   const before=validateCart(Array.isArray(body.cart)?body.cart:[],catalog);
+  if(before.valid && before.cart.length && isCancelEntireOrder(last.content)){
+    const cleared={...EMPTY_DRAFT};
+    return NextResponse.json({
+      reply:'Pedido de teste cancelado e carrinho limpo. Quer começar um novo pedido? 😊',
+      cart:[],subtotal:0,draft:cleared,ready:true,
+      quote:{readyForSimulation:false,issues:['Escolher pelo menos um produto do cardápio.'],deliveryFee:null,total:null,warnings:[]}
+    },{headers:{'Cache-Control':'no-store'}});
+  }
   const fast=!image?handleFastStep({
     message:last.content,
     lastAssistant:messages.slice(0,-1).filter(m=>m.role==='assistant').at(-1)?.content||'',
