@@ -75,7 +75,7 @@ export function resolveMixedFlavorIntent(messages:Message[],catalog:Catalog,curr
   const relevant=explicit.length>=2||flavorMessage(current);
   if(!relevant)return null; // Greetings and other product requests must not replay the mixed order.
   const context=users.filter(m=>m.index>=request.index);
-  const alreadyMixed=context.some(m=>/\b(misto|misturado|mistura|todos)\b/.test(normalize(m.content)));
+  const alreadyMixed=context.some(m=>/\b(misto|mistos|mista|mistas|misturado|misturados|mistura|todos|todas)\b/.test(normalize(m.content)));
 
   const excludedIds=new Set<string>();
   const omissions:string[]=[];
