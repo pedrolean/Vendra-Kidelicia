@@ -96,11 +96,11 @@ export function resolveMixedFlavorIntent(messages:Message[],catalog:Catalog,curr
   // to silently replace the previously agreed exclusion.
   if(!chosen.length&&explicit.length&&explicit.some(o=>excludedIds.has(o.id)))return null;
   if(!chosen.length&&alreadyMixed)chosen=allowed;
-  if(!chosen.length||chosen.length>70||units>99*chosen.length)return null;
+  if(!chosen.length||chosen.length>70||units>10000*chosen.length)return null;
 
   const perFlavor=Math.floor(units/chosen.length),remainder=units%chosen.length;
   const extras=chosen.map((o,i)=>({extraId:o.id,quantity:perFlavor+(i<remainder?1:0)}));
-  if(extras.some(e=>e.quantity<1||e.quantity>99))return null;
+  if(extras.some(e=>e.quantity<1||e.quantity>10000))return null;
   const cart=currentCart.slice();
   const existing=cart.findIndex(line=>line.productId===product.id);
   const line:CartLine={productId:product.id,quantity:1,extras};
