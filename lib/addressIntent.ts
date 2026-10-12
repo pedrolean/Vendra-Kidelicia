@@ -1,5 +1,5 @@
 import type { Catalog } from './catalog';
-import { inferCityFromZones, type Draft } from './checkout';
+import { inferCityFromZones, type Draft } from './checkout.ts';
 
 function normalize(text:string){
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
