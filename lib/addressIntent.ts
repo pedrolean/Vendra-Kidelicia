@@ -23,6 +23,13 @@ export function enrichAddressFromMessage(
     .sort((a,b)=>b.neighborhood.length-a.neighborhood.length);
   const zone=found[0];
   const next={...draft};
+  // A language-model guess is not evidence of an address. Only accept
+  // fields already confirmed previously or actually present in the message.
+  if(next.neighborhood!==previous.neighborhood &&
+      !zone&&!includesPhrase(message,next.neighborhood))next.neighborhood=previous.neighborhood;
+  if(next.street!==previous.street&&!includesPhrase(message,next.street))next.street=previous.street;
+  if(next.number!==previous.number&&!new RegExp('\\b'+next.number+'\\b').test(message))next.number=previous.number;
+  if(!explicitCity&&next.city!==previous.city)next.city=previous.city;
   if(zone){
     // Preserve canonical neighborhood spelling. The city is inferred only if
     // there is exactly one city for this registered neighborhood.
