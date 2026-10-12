@@ -3,6 +3,7 @@ import { isAuthenticated } from '@/lib/auth';
 import { loadCatalog, type Catalog, type Product } from '@/lib/catalog';
 import { validateCart } from '@/lib/cart';
 import { chooseVerifiedCart } from '@/lib/cartIntent';
+import { enrichAddressFromMessage } from '@/lib/addressIntent';
 import { EMPTY_DRAFT, inferCityFromZones, quoteOrder, sanitizeDraft } from '@/lib/checkout';
 import { resolveMixedFlavorIntent } from '@/lib/flavorIntent';
 import { safeCheckoutReply } from '@/lib/checkoutDialogue';
@@ -160,7 +161,8 @@ export async function POST(request:Request){
     // Address, neighborhood, phone and payment turns preserve previously
     // validated items even if the model accidentally returns altered flavors.
     const accepted=decision.accepted;
-    const draft=inferCityFromZones(sanitizeDraft(parsed.draft,previousDraft),catalog,explicitlyNamedCity);
+    const draft=enrichAddressFromMessage(last.content,previousDraft,
+      sanitizeDraft(parsed.draft,previousDraft),catalog,explicitlyNamedCity);
     // Upsell state is server-owned; the model cannot mark itself accepted/declined.
     draft.upsellStatus=previousDraft.upsellStatus;
     const currentOptions=upsellOptions(before,catalog);
