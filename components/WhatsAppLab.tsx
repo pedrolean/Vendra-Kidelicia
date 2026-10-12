@@ -144,7 +144,11 @@ export default function WhatsAppLab(){
        <div ref={bottom}/>
      </div>
      <div className="wa-footer">
-       {subtotal>0&&<div className="wa-summary">🛍️ Pedido simulado: {cart.length} item(ns) · <strong>{money(quote?.total??subtotal)}</strong> <span>{quote?.total!==null&&quote?.total!==undefined&&draft.fulfillment==='delivery'?'Inclui entrega':'Não enviado'}</span></div>}
+       {subtotal>0&&<div className="wa-summary">
+         🛍️ {draft.fulfillment==='delivery'&&quote?.deliveryFee!==null&&quote?.deliveryFee!==undefined&&quote?.total!==null&&quote?.total!==undefined
+           ?<>Total simulado: <strong>{money(quote.total)}</strong> <span>com entrega · não enviado</span></>
+           :<>Produtos: <strong>{money(subtotal)}</strong> <span>{draft.fulfillment==='delivery'?'Frete a confirmar · não enviado':'Não enviado'}</span></>}
+       </div>}
        {error&&<div className="wa-error" role="alert">{error}<button onClick={()=>setError('')} aria-label="Dispensar aviso"><X size={15}/></button></div>}
        {photo&&<div className="wa-attachment"><img src={photo} alt="Prévia da foto"/><span>Foto pronta para enviar</span><button onClick={()=>setPhoto(null)} aria-label="Remover imagem"><X size={18}/></button></div>}
        <div className="wa-composer">
