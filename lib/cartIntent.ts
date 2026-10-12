@@ -1,5 +1,5 @@
 import type { Catalog } from './catalog';
-import { validateCart, type VerifiedCart } from './cart';
+import { validateCart, type VerifiedCart } from './cart.ts';
 
 function normalize(text:string){
  return text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
