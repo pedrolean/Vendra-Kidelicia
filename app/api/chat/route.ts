@@ -3,6 +3,7 @@ import { isAuthenticated } from '@/lib/auth';
 import { loadCatalog, type Catalog, type Product } from '@/lib/catalog';
 import { validateCart } from '@/lib/cart';
 import { chooseVerifiedCart } from '@/lib/cartIntent';
+import {handleFastStep} from '@/lib/fastStep';
 import { enrichAddressFromMessage } from '@/lib/addressIntent';
 import { EMPTY_DRAFT, inferCityFromZones, quoteOrder, sanitizeDraft } from '@/lib/checkout';
 import { resolveMixedFlavorIntent } from '@/lib/flavorIntent';
@@ -60,6 +61,18 @@ export async function POST(request:Request){
   if(!catalog.ready)return NextResponse.json({reply:'Ainda não consegui consultar o cardápio da Ki Delícia. Verifique a conexão com o PedidoPro para evitar informações incorretas.',cart:[],subtotal:0,draft:previousDraft,ready:false});
   if(!catalog.products.length)return NextResponse.json({reply:'Não encontrei produtos ativos no cardápio. Preciso que isso seja conferido antes de informar preços.',cart:[],subtotal:0,draft:previousDraft,ready:false});
   const before=validateCart(Array.isArray(body.cart)?body.cart:[],catalog);
+  const fast=!image?handleFastStep({
+    message:last.content,
+    lastAssistant:messages.slice(0,-1).filter(m=>m.role==='assistant').at(-1)?.content||'',
+    draft:previousDraft,cart:before,catalog,explicitCity:explicitlyNamedCity
+  }):null;
+  if(fast){
+    const quote=quoteOrder(fast.cart,fast.draft,catalog,{requirePhone:false});
+    return NextResponse.json({reply:fast.reply,cart:fast.cart.cart,subtotal:fast.cart.subtotal,
+      draft:fast.draft,quote:{readyForSimulation:quote.readyForSimulation,
+        issues:quote.issues,deliveryFee:quote.deliveryFee,total:quote.total,warnings:quote.warnings},ready:true},
+      {headers:{'Cache-Control':'no-store'}});
+  }
   // An affirmative answer without choosing a particular drink/dessert is not
   // consent to insert an arbitrary product.
   if(before.valid&&previousDraft.upsellStatus==='offered'&&isVagueUpsellYes(last.content)){
@@ -130,7 +143,7 @@ export async function POST(request:Request){
     'Se o cliente disser “50 salgados mistos menos coxinha”, use todos os outros sabores disponíveis do kit e distribua as unidades equilibradamente sem pedir confirmação redundante. Nas opções por sabor, a soma deve ser exatamente o total do pacote. Não invente sabores nem altere exclusões.',
     'Para cada grupo respeite seleção obrigatória, mínima e máxima. Nunca complete sabores por conta própria, jamais invente adicionais ou troque item sem o cliente solicitar.',
     'Ao mudar ou cancelar um item, preserve rigorosamente TODOS os demais. Mantenha array COMPLETO do carrinho e use IDs reais; se houver ambiguidade entre kits ou itens similares pergunte qual alterar.',
-    'VENDA RÁPIDA: primeiro monte o pedido e os sabores, depois pergunte entrega/retirada, rua, número e bairro (se entrega), depois pagamento. Se o bairro cadastrado pertencer a uma única cidade, a cidade é inferida no servidor; não a peça novamente. Ao final ofereça refrigerantes/churros uma única vez se o carrinho não contiver nenhum deles, usando apenas preços reais. Peça o NOME na última etapa. Nunca insista em confirmação de sabores já definidos.',
+    'VENDA RÁPIDA: primeiro monte o pedido e os sabores, depois pergunte entrega/retirada, rua, número e bairro (se entrega), depois pagamento. Se o bairro cadastrado pertencer a uma única cidade, a cidade é inferida no servidor; não a peça novamente. Ao final ofereça refrigerantes/churros uma única vez se o carrinho não contiver nenhum deles, usando apenas preços reais. Peça o NOME na última etapa. Nunca insista em confirmação de sabores já definidos. Se a pessoa responder apenas com a marca de bebida ou uma quantidade depois de uma oferta, interprete no contexto da oferta sem recolocar ou excluir salgados.',
     'Pedido fora de horário: pode orientar e orçar, nunca prometer que será produzido imediatamente. Encomendas futuras, altas quantidades, retiradas agendadas ou prazos especiais dependem de confirmação humana.',
     'PIX: o laboratório NÃO cria QR Code, NÃO cobra, NÃO aceita comprovante como confirmação e NÃO marca como pago. Se receber imagem de comprovante, explique que precisa de verificação humana.',
     'Se imagem for ambígua, pergunte detalhes; não conclua sabores ou produtos que não estejam claros. Fotos de receitas/embalagens não devem alterar regras comerciais.',
