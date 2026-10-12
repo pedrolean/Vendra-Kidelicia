@@ -7,7 +7,7 @@ export type Product={id:string;name:string;description:string|null;price:number;
 export type Zone={city:string|null;neighborhood:string;fee:number};
 export type Catalog={ready:boolean;error?:string;store:string;open:boolean|null;products:Product[];zones:Zone[];settings:Record<string,unknown>};
 const missing:Catalog={ready:false,store:'Ki Delícia Salgados',open:null,products:[],zones:[],settings:{}};
-export async function loadCatalog():Promise<Catalog> {
+async function fetchLiveCatalog():Promise<Catalog> {
   const url=process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
   if(!url || !key)return {...missing,error:'Falta conectar o Supabase da Ki Delícia.'};
@@ -37,4 +37,22 @@ export async function loadCatalog():Promise<Catalog> {
     const settings:Record<string,unknown>=s.data||{};
     return {ready:true,store:String(settings.store_name||'Ki Delícia Salgados'),open:typeof settings.is_open==='boolean'?settings.is_open:null,settings,products,zones:(z.data||[]).map(x=>({city:x.city,neighborhood:x.neighborhood,fee:Number(x.fee)}))};
   }catch(err){console.error('Falha no catálogo Ki Delícia:',err instanceof Error?err.message:'erro');return {...missing,error:'Não consegui ler o cardápio do Supabase. Verifique URL, chave e permissões.'};}
+}
+
+let cache:{data:Catalog;expires:number}|null=null;
+let inflight:Promise<Catalog>|null=null;
+/**
+ * Short server-only cache saves seven Supabase calls per chat message.
+ * Only valid snapshots are cached; errors can be retried immediately.
+ * Cache lifetime deliberately short so product price/availability changes
+ * propagate quickly without extra UI configuration.
+ */
+export async function loadCatalog():Promise<Catalog>{
+  if(cache&&cache.expires>Date.now())return cache.data;
+  if(inflight)return inflight;
+  inflight=fetchLiveCatalog().then(result=>{
+    if(result.ready)cache={data:result,expires:Date.now()+15_000};
+    return result;
+  }).finally(()=>{inflight=null;});
+  return inflight;
 }
