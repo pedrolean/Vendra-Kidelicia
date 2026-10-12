@@ -13,6 +13,7 @@ const removals=/\b(tira|tirar|retira\w*|remove\w*|cancela\w*|exclui\w*|sem|menos
 function productMentioned(message:string,product:Product){
  const text=norm(message),name=norm(product.name);
  if(contains(text,name))return true;
+ if(contains(name,'salgados')&&contains(text,'salgados'))return true;
  const meaningful=name.split(' ').filter(x=>x.length>4&&!['unidades','porcao','unidade','bebidas','salgados'].includes(x));
  return meaningful.some(token=>contains(text,token));
 }
@@ -23,6 +24,11 @@ function lineEqual(a:CartLine,b:CartLine){
  return a.quantity===b.quantity&&a.notes===b.notes&&
   a.extras.length===b.extras.length &&
   a.extras.every(x=>b.extras.some(y=>y.extraId===x.extraId&&y.quantity===x.quantity));
+}
+export function isCancelEntireOrder(message:string):boolean{
+ const text=norm(message);
+ return /^(?:cancela|cancelar|cancele|apaga|apagar|limpa|limpar|exclui|excluir|remove|remover|desisto|nao quero mais)(?: o| os| meu| meus| esse| essa)? (?:pedido|pedidos|carrinho|itens|tudo)$/.test(text) ||
+   /^(?:cancela|cancelar|apaga|limpa|exclui|remove|remover) tudo$/.test(text);
 }
 export function isCartEditMessage(message:string,catalog:Catalog):boolean{
  const text=norm(message);
