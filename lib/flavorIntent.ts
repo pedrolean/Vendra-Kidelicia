@@ -95,7 +95,8 @@ export function resolveMixedFlavorIntent(messages:Message[],catalog:Catalog,curr
 
   const current=latest.content;
   const explicit=mentionedOptions(current,group);
-  const relevant=explicit.length>=2||flavorMessage(current);
+  const counted=explicitFlavorCounts(current,group);
+  const relevant=counted.size>0||explicit.length>=2||flavorMessage(current);
   if(!relevant)return null; // Greetings and other product requests must not replay the mixed order.
   const context=users.filter(m=>m.index>=request.index);
   const alreadyMixed=context.some(m=>/\b(misto|mistos|mista|mistas|misturado|misturados|mistura|todos|todas)\b/.test(normalize(m.content)));
@@ -111,7 +112,6 @@ export function resolveMixedFlavorIntent(messages:Message[],catalog:Catalog,curr
     }
   }
   const allowed=group.options.filter(o=>!excludedIds.has(o.id));
-  const counted=explicitFlavorCounts(current,group);
   const all=/\b(todos|todas|misto|mistos|mista|mistas|misturado|misturados|mistura)\b/.test(normalize(current));
   const only=/\b(so|apenas|somente|exclusivamente)\b/.test(normalize(current));
   let chosen=counted.size?allowed.filter(o=>counted.has(o.id))
