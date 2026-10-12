@@ -61,3 +61,18 @@ test('mensagem posterior de pagamento não altera os sabores',()=>{
 test('menção isolada de sabor excluído não reverte exclusão',()=>{
   assert.equal(resolve('Quero 30 salgados','Misto menos salsicha','Salsicha'),null);
 });
+
+test('2 kits de 30 mistos menos salsicha totalizam 60 sem refazer perguntas',()=>{
+ const result=resolve('Quero 2 kits de 30 salgados mistos menos salsicha');
+ assert.ok(result);
+ assert.equal(result.cart[0].quantity,2);
+ assert.equal(result.cart[0].extras.length,5);
+ assert.deepEqual(result.cart[0].extras.map(extra=>extra.quantity),[12,12,12,12,12]);
+ assert.match(result.reply,/60 salgados/);
+});
+test('3 pacotes de 30 mistos somam exatamente 90 sabores',()=>{
+ const result=resolve('Quero 3 pacotes de 30 salgados mistos menos salsicha');
+ assert.ok(result);
+ assert.equal(result.cart[0].quantity,3);
+ assert.equal(result.cart[0].extras.reduce((total,extra)=>total+extra.quantity,0),90);
+});
