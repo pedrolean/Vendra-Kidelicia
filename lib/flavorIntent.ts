@@ -42,13 +42,13 @@ function mentionedOptions(text:string,group:Group){
     normalize(other.name).includes(normalize(option.name)) && has(text,other.name)));
 }
 function flavorMessage(text:string){
-  return /\b(misto|misturado|mistura|todos|sabores|menos|exceto|sem|tira|retira)\b/.test(normalize(text));
+  return /\b(misto|mistos|mista|mistas|misturado|misturados|mistura|todos|todas|sabores|menos|exceto|sem|tira|retira)\b/.test(normalize(text));
 }
 function response(units:number,selected:{name:string;quantity:number}[],omissions:string[],uneven:boolean){
   const list=selected.map(item=>item.quantity+' de '+item.name.toLowerCase());
   const description=list.length===1?list[0]:list.slice(0,-1).join(', ')+' e '+list[list.length-1];
   const excluded=omissions.length?' Sem '+omissions.map(x=>x.toLowerCase()).join(', ')+'.':'';
-  const question=uneven?' Distribuí da forma mais equilibrada possível. Pode ser assim?':' Você prefere entrega ou retirada?';
+  const question=uneven?' Distribuí as unidades da forma mais equilibrada possível. Você prefere entrega ou retirada?':' Você prefere entrega ou retirada?';
   return 'Perfeito! Ficaram '+units+' salgados: '+description+'.'+excluded+question;
 }
 
@@ -88,7 +88,7 @@ export function resolveMixedFlavorIntent(messages:Message[],catalog:Catalog,curr
     }
   }
   const allowed=group.options.filter(o=>!excludedIds.has(o.id));
-  const all=/\b(todos|misto|misturado|mistura)\b/.test(normalize(current));
+  const all=/\b(todos|todas|misto|mistos|mista|mistas|misturado|misturados|mistura)\b/.test(normalize(current));
   const only=/\b(so|apenas|somente|exclusivamente)\b/.test(normalize(current));
   let chosen=all&&!only?allowed:explicit.filter(o=>!excludedIds.has(o.id));
 
